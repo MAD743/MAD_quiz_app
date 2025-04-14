@@ -1,122 +1,170 @@
+import 'dart:convert';
+import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 
 void main() {
-  runApp(const MyApp());
+  runApp(const QuizApp());
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class QuizApp extends StatelessWidget {
+  const QuizApp({super.key});
 
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Flutter Demo',
-      theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-      ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
-    );
+    return MaterialApp(title: 'Trivia Quiz', home: QuizScreen());
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
-
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
-  final String title;
-
+class QuizScreen extends StatefulWidget {
   @override
-  State<MyHomePage> createState() => _MyHomePageState();
+  State<QuizScreen> createState() => _QuizScreenState();
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
+class _QuizScreenState extends State<QuizScreen> {
+  List _questions = [];
+  int _currentIndex = 0;
+  bool _loading = true;
+  bool _answered = false;
+  String _correctAnswer = '';
+  String? _selectedAnswer;
 
-  void _incrementCounter() {
+  @override
+  void initState() {
+    super.initState();
+    _fetchQuestions();
+  }
+
+  void _fetchQuestions() async {
+    const url =
+        'https://opentdb.com/api.php?amount=10&type=multiple&difficulty=easy&category=9';
+    final response = await http.get(Uri.parse(url));
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      setState(() {
+        _questions = data['results'];
+        _loading = false;
+        _correctAnswer = _questions[_currentIndex]['correct_answer'];
+      });
+    } else {
+      print('Failed to load questions');
+    }
+  }
+
+  List<String> _getShuffledAnswers(Map question) {
+    final answers = List<String>.from(question['incorrect_answers']);
+    answers.add(question['correct_answer']);
+    answers.shuffle(Random());
+    return answers;
+  }
+
+  void _selectAnswer(String answer) {
+    if (_answered) return;
+
     setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
+      _selectedAnswer = answer;
+      _answered = true;
     });
   }
 
+  void _nextQuestion() {
+    if (_currentIndex + 1 < _questions.length) {
+      setState(() {
+        _currentIndex++;
+        _answered = false;
+        _selectedAnswer = null;
+        _correctAnswer = _questions[_currentIndex]['correct_answer'];
+      });
+    } else {
+      _showFinishDialog();
+    }
+  }
+
+  void _showFinishDialog() {
+    showDialog(
+      context: context,
+      builder:
+          (_) => AlertDialog(
+            title: const Text("Quiz Finished"),
+            content: const Text("You reached the end!"),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  setState(() {
+                    _currentIndex = 0;
+                    _answered = false;
+                    _selectedAnswer = null;
+                  });
+                },
+                child: const Text("Restart"),
+              ),
+            ],
+          ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
+    if (_loading) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+
+    final question = _questions[_currentIndex];
+    final answers = _getShuffledAnswers(question);
+
     return Scaffold(
-      appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
-      ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
+      appBar: AppBar(title: const Text('Trivia Quiz')),
+      body: Padding(
+        padding: const EdgeInsets.all(16),
         child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            const Text('You have pushed the button this many times:'),
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
             Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
+              'Question ${_currentIndex + 1} of ${_questions.length}',
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
+            const SizedBox(height: 12),
+            Text(
+              _decodeHtml(question['question']),
+              style: const TextStyle(fontSize: 16),
+            ),
+            const SizedBox(height: 20),
+            ...answers.map((answer) {
+              Color? color;
+              if (_answered) {
+                if (answer == _correctAnswer) {
+                  color = Colors.green;
+                } else if (answer == _selectedAnswer) {
+                  color = Colors.red;
+                }
+              }
+
+              return Container(
+                margin: const EdgeInsets.symmetric(vertical: 5),
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: color),
+                  onPressed: () => _selectAnswer(answer),
+                  child: Text(_decodeHtml(answer)),
+                ),
+              );
+            }),
+            const SizedBox(height: 20),
+            if (_answered)
+              Center(
+                child: ElevatedButton(
+                  onPressed: _nextQuestion,
+                  child: const Text("Next Question"),
+                ),
+              ),
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
-      ), // This trailing comma makes auto-formatting nicer for build methods.
     );
+  }
+
+  String _decodeHtml(String input) {
+    return input.replaceAll('&quot;', '"').replaceAll('&#039;', "'");
   }
 }
